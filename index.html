@@ -776,13 +776,29 @@
   };
 
   function renderRecetasTab() {
-    // Populate datalist with known ingredients
+    // Populate datalist — solo nombres limpios del listado de precios, sin duplicados ni claves internas
     const dl = document.getElementById('ingListDL');
     if (dl) {
-      dl.innerHTML = Object.values(STATE.ingredientes)
-        .map(i=>`<option value="${i.nombre.toLowerCase()}">`)
-        .join('') +
-        Object.keys(ING_MAP).map(k=>`<option value="${k}">`).join('');
+      const seen = new Set();
+      const opts = [];
+      // Primero los nombres del listado de ingredientes (fuente principal)
+      Object.values(STATE.ingredientes).forEach(i => {
+        const nombre = i.nombre ? i.nombre.toLowerCase() : '';
+        if (nombre && !seen.has(nombre)) {
+          seen.add(nombre);
+          opts.push(`<option value="${nombre}">`);
+        }
+      });
+      // Luego los nombres del ING_MAP (nombres de recetas) que no sean claves técnicas
+      Object.keys(ING_MAP).forEach(k => {
+        const limpio = k.trim();
+        // Excluir claves con guiones bajos (claves internas) o espacios extra
+        if (limpio && !seen.has(limpio) && !limpio.includes('_')) {
+          seen.add(limpio);
+          opts.push(`<option value="${limpio}">`);
+        }
+      });
+      dl.innerHTML = opts.join('');
     }
     renderRecipeIngList();
     renderCustomRecipesList();
