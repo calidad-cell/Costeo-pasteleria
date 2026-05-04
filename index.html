@@ -387,9 +387,12 @@
           <span class="porcion-cost">${costXPorc !== null ? $f(costXPorc)+' /u' : '<span style=\'color:var(--text-light);font-size:11px\'>Ingresa porciones</span>'}</span>
         </div>
         ${custom?`<div style="margin-top:8px;display:flex;gap:6px">
-          <button class="btn btn-sm" style="flex:1;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B" onclick="event.stopPropagation();editRecipe('${p}')">✏️ Editar</button>
-          <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();deleteRecipe('${p}')">🗑 Eliminar</button>
-        </div>`:''}
+          <button class="btn btn-sm" style="flex:1;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B" onclick="event.stopPropagation();editRecipe('${p}')">✏️ Editar receta</button>
+          <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();deleteRecipe('${p}')">🗑</button>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button class="btn btn-sm" style="flex:1;background:#FFF8EE;color:#92400E;border:1px solid #F59E0B" onclick="event.stopPropagation();editRecipe('${p}')">✏️ Editar receta</button>
+          ${custom?`<button class="btn btn-sm btn-delete" onclick="event.stopPropagation();deleteRecipe('${p}')">🗑</button>`:''}
+        </div>
       </div>`;
     }).join('');
   }
@@ -487,6 +490,21 @@
   };
 
   // ════════════════════════════════════════════════
+  // FORMATO NÚMERO CHILENO
+  // Punto como separador de miles, coma para decimales
+  // ════════════════════════════════════════════════
+  function parseCLP(str) {
+    // Acepta tanto "1.500,50" como "1500.50" — convierte a número
+    if (typeof str === 'number') return str;
+    const s = String(str).trim();
+    // Si tiene coma como decimal (formato CL): quitar puntos de miles, reemplazar coma por punto
+    if (s.match(/\d+\.\d{3}/) || s.includes(',')) {
+      return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0;
+    }
+    return parseFloat(s) || 0;
+  }
+
+  // ════════════════════════════════════════════════
   // INGREDIENTES
   // ════════════════════════════════════════════════
   window.ingPending = {};
@@ -497,12 +515,15 @@
       const pxKg=getPrecioKg(key);
       const noPrice=!ing.precio_neto||ing.precio_neto===0;
       return`<tr>
-        <td style="${noPrice?'color:var(--danger);font-weight:600':''}">
-          ${ing.nombre}<div style="font-size:10px;color:var(--text-light);font-weight:400">${key}</div>
+        <td>
+          <input type="text" value="${ing.nombre||''}" style="font-weight:600;${noPrice?'color:var(--danger)':''}" 
+            onchange="stagePending('${key}','nombre',this.value.toUpperCase())">
+          <div style="font-size:10px;color:var(--text-light);margin-top:2px">${key}</div>
         </td>
         <td><input type="text" value="${ing.categoria||''}" style="max-width:130px" onchange="stagePending('${key}','categoria',this.value)"></td>
         <td><input type="text" value="${ing.formato_compra||''}" style="max-width:120px" placeholder="KG, 500 GRS..." onchange="stagePending('${key}','formato_compra',this.value)"></td>
-        <td><input type="number" value="${ing.precio_neto||0}" min="0" style="max-width:110px" onchange="stagePending('${key}','precio_neto',parseFloat(this.value)||0)"></td>
+        <td><input type="text" inputmode="decimal" value="${(ing.precio_neto||0).toLocaleString('es-CL')}" style="max-width:110px" 
+            placeholder="0" onchange="stagePending('${key}','precio_neto',parseCLP(this.value))"></td>
         <td class="muted">${pxKg!==null?$f(pxKg)+'/kg':'<span class="no-price">Sin datos</span>'}</td>
         <td><button class="btn btn-sm btn-save" onclick="saveIngRow('${key}')">💾 Guardar</button></td>
       </tr>`;
@@ -562,7 +583,7 @@
 
   window.addCIF = function() {
     const nombre=document.getElementById('newCifNombre').value.trim();
-    const monto=parseFloat(document.getElementById('newCifMonto').value)||0;
+    const monto=parseCLP(document.getElementById('newCifMonto').value);
     if(!nombre){alert('Ingresa una descripción');return;}
     addToList('cif',{nombre,categoria:document.getElementById('newCifCat').value,monto});
     document.getElementById('newCifNombre').value='';
@@ -597,7 +618,7 @@
     if(!nombre){alert('Ingresa nombre del envase');return;}
     addToList('packaging',{
       nombre,producto:document.getElementById('newPkgProd').value,
-      precio:parseFloat(document.getElementById('newPkgPrecio').value)||0,
+      precio:parseCLP(document.getElementById('newPkgPrecio').value),
       cantidad:parseInt(document.getElementById('newPkgCant').value)||1
     });
     document.getElementById('newPkgNombre').value='';
@@ -643,7 +664,7 @@
     if(!nombre){alert('Ingresa nombre/cargo');return;}
     addToList('mod',{
       nombre,tipo:document.getElementById('newModTipo').value,
-      monto:parseFloat(document.getElementById('newModMonto').value)||0,
+      monto:parseCLP(document.getElementById('newModMonto').value),
       horas:parseFloat(document.getElementById('newModHoras').value)||160
     });
     document.getElementById('newModNombre').value='';
@@ -821,26 +842,19 @@
     if (!nombre) { alert('Ingresa el nombre del producto'); return; }
     if (recipeIngredientes.length === 0) { alert('Agrega al menos un ingrediente'); return; }
 
-    // Check if name conflicts with a base Excel recipe (and we're not editing it)
-    if (RECIPES[nombre] && editingRecipeName !== nombre) {
-      alert(`Ya existe una receta de Excel con el nombre "${nombre}". Usa un nombre diferente.`);
-      return;
-    }
-
     if (!STATE.customRecipes) STATE.customRecipes = {};
     STATE.customRecipes[nombre] = {
       codigo,
-      ingredientes: recipeIngredientes.map(i => ({ ...i }))
+      ingredientes: recipeIngredientes.map(i => ({ ...i })),
+      editedFromExcel: !!RECIPES[nombre]
     };
 
-    // Save porciones if set
     if (porciones > 0) {
       if (!STATE.porciones) STATE.porciones = {};
       STATE.porciones[nombre] = porciones;
       savePorciones();
     }
 
-    // If renaming, delete old key
     if (editingRecipeName && editingRecipeName !== nombre) {
       delete STATE.customRecipes[editingRecipeName];
     }
@@ -864,8 +878,12 @@
   };
 
   window.editRecipe = function(nombre) {
-    const recipe = STATE.customRecipes && STATE.customRecipes[nombre];
-    if (!recipe) { showToast('Esta receta no se puede editar (viene del Excel)'); return; }
+    // Allow editing both custom AND Excel recipes
+    const customRecipe = STATE.customRecipes && STATE.customRecipes[nombre];
+    const excelRecipe = RECIPES[nombre];
+    const recipe = customRecipe || excelRecipe;
+
+    if (!recipe) { showToast('Receta no encontrada'); return; }
 
     // Switch to recetas tab
     document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
@@ -885,7 +903,22 @@
     document.getElementById('recipeFormCard').scrollIntoView({ behavior: 'smooth' });
   };
 
+  window.restoreExcelRecipe = function(nombre) {
+    if (!confirm(`¿Restaurar "${nombre}" a su receta original del Excel? Se perderán los cambios.`)) return;
+    if (STATE.customRecipes && STATE.customRecipes[nombre]) {
+      delete STATE.customRecipes[nombre];
+      saveCustomRecipes();
+      renderDashboard();
+      renderCustomRecipesList();
+      showToast(`↩ Receta "${nombre}" restaurada al original`);
+    }
+  };
+
   window.deleteRecipe = function(nombre) {
+    if (RECIPES[nombre]) {
+      showToast('⚠️ Las recetas del Excel no se pueden eliminar. Puedes editarlas o restaurarlas.');
+      return;
+    }
     if (!confirm(`¿Eliminar la receta "${nombre}"? Esta acción no se puede deshacer.`)) return;
     if (STATE.customRecipes) {
       delete STATE.customRecipes[nombre];
@@ -900,29 +933,31 @@
   function renderCustomRecipesList() {
     const container = document.getElementById('customRecipesList');
     if (!container) return;
+    const allR = getAllRecipes();
+    const keys = Object.keys(allR).sort();
     const customs = STATE.customRecipes || {};
-    const keys = Object.keys(customs);
 
-    if (keys.length === 0) {
-      container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-light);font-size:14px">
-        Aún no has creado recetas personalizadas.<br>
-        <span style="font-size:12px">Usa el formulario de arriba para agregar tu primera receta.</span>
-      </div>`;
-      return;
-    }
-
-    container.innerHTML = keys.sort().map(nombre => {
-      const r = customs[nombre];
+    container.innerHTML = keys.map(nombre => {
+      const r = allR[nombre];
       const c = totalCost(nombre);
       const porc = getPorciones(nombre);
+      const isCustom = !!customs[nombre];
+      const isEdited = customs[nombre] && customs[nombre].editedFromExcel;
+      const isExcel = !!RECIPES[nombre] && !isEdited;
+
       return `
-        <div style="border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:12px;background:var(--warm-white)">
+        <div style="border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:12px;background:${isCustom&&!isEdited?'#F5F3FF':isEdited?'#FFF8EE':'var(--warm-white)'}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px">
             <div>
-              <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:var(--cocoa)">${nombre}</div>
-              <div style="font-size:11px;color:var(--text-light)">Cód. ${r.codigo} · ${r.ingredientes.length} ingredientes${porc?` · ${porc} porciones`:''}</div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:var(--cocoa)">${nombre}</div>
+                ${isEdited?`<span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600">✏️ Modificada</span>`:''}
+                ${isCustom&&!isEdited?`<span class="custom-badge">✨ Nueva</span>`:''}
+                ${isExcel?`<span style="background:#E0F2FE;color:#0C4A6E;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600">📊 Excel</span>`:''}
+              </div>
+              <div style="font-size:11px;color:var(--text-light);margin-top:2px">Cód. ${r.codigo} · ${r.ingredientes.length} ingredientes${porc?` · ${porc} porciones`:''}</div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <div style="text-align:center;padding:8px 16px;background:var(--cocoa);border-radius:8px;color:var(--gold-light)">
                 <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Costo receta</div>
                 <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700">${$f(c.total)}</div>
@@ -932,7 +967,8 @@
                 <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:var(--cocoa)">${$f(c.total/porc)}</div>
               </div>`:''}
               <button class="btn btn-sm" style="background:#FEF3C7;color:#92400E;border:1px solid #F59E0B" onclick="editRecipe('${nombre}')">✏️ Editar</button>
-              <button class="btn btn-sm btn-delete" onclick="deleteRecipe('${nombre}')">🗑 Eliminar</button>
+              ${isCustom?`<button class="btn btn-sm btn-delete" onclick="deleteRecipe('${nombre}')">🗑</button>`:''}
+              ${isEdited?`<button class="btn btn-sm" style="background:#F0FDF4;color:#14532D;border:1px solid #86EFAC" onclick="restoreExcelRecipe('${nombre}')">↩ Restaurar original</button>`:''}
             </div>
           </div>
           <div class="tbl-wrap">
@@ -1237,7 +1273,7 @@
       <div class="card">
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Ingrediente</th><th>Categoría</th><th>Formato Compra</th><th>Precio Neto ($)</th><th>Precio/Kg equiv.</th><th>Guardar</th></tr></thead>
+            <thead><tr><th>Nombre ingrediente</th><th>Categoría</th><th>Formato Compra</th><th>Precio Neto ($)</th><th>Precio/Kg equiv.</th><th>Guardar</th></tr></thead>
             <tbody id="ingTable"></tbody>
           </table>
         </div>
@@ -1255,7 +1291,7 @@
           <div class="form-group"><label>Categoría</label>
             <select id="newCifCat"><option>Servicios básicos</option><option>Arriendo</option><option>Insumos limpieza</option><option>Mantención equipos</option><option>Depreciación</option><option>Seguros</option><option>Otro</option></select>
           </div>
-          <div class="form-group"><label>Monto mensual ($)</label><input type="number" id="newCifMonto" min="0" placeholder="0"></div>
+          <div class="form-group"><label>Monto mensual ($)</label><input type="text" inputmode="decimal" id="newCifMonto" placeholder="Ej: 150.000"></div>
           <div class="form-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="addCIF()">Agregar</button></div>
         </div>
       </div>
@@ -1281,7 +1317,7 @@
         <div class="form-row">
           <div class="form-group"><label>Nombre envase</label><input type="text" id="newPkgNombre" placeholder="Ej: Caja kraft individual"></div>
           <div class="form-group"><label>Producto asociado</label><select id="newPkgProd"><option value="todos">Todos los productos</option></select></div>
-          <div class="form-group"><label>Precio unit. ($)</label><input type="number" id="newPkgPrecio" min="0" placeholder="0"></div>
+          <div class="form-group"><label>Precio unit. ($)</label><input type="text" inputmode="decimal" id="newPkgPrecio" placeholder="Ej: 1.500"></div>
           <div class="form-group"><label>Cantidad</label><input type="number" id="newPkgCant" min="1" value="1"></div>
           <div class="form-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="addPackaging()">Agregar</button></div>
         </div>
@@ -1305,7 +1341,7 @@
           <div class="form-group"><label>Tipo</label>
             <select id="newModTipo"><option>Sueldo mensual</option><option>Por hora</option><option>Por lote</option></select>
           </div>
-          <div class="form-group"><label>Monto ($)</label><input type="number" id="newModMonto" min="0" placeholder="0"></div>
+          <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="decimal" id="newModMonto" placeholder="Ej: 650.000"></div>
           <div class="form-group"><label>Horas/mes</label><input type="number" id="newModHoras" min="0" placeholder="160"></div>
           <div class="form-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="addMOD()">Agregar</button></div>
         </div>
@@ -1344,7 +1380,7 @@
     <!-- RECETAS -->
     <div class="tab-content" id="tab-recetas">
       <div class="section-title">Gestión de Recetas</div>
-      <div class="section-sub">Crea y edita recetas nuevas. Las recetas del Excel no se pueden eliminar, pero puedes agregar todas las que necesites.</div>
+      <div class="section-sub">Edita cualquier receta — tanto las del Excel como las nuevas. Los cambios se guardan en la nube y se sincronizan al instante.</div>
 
       <!-- FORM NUEVA / EDITAR RECETA -->
       <div class="card" style="margin-bottom:24px;" id="recipeFormCard">
@@ -1408,7 +1444,7 @@
 
       <!-- LISTADO RECETAS PERSONALIZADAS -->
       <div class="card">
-        <div style="font-weight:600;font-size:15px;color:var(--cocoa);margin-bottom:16px">Recetas personalizadas guardadas</div>
+        <div style="font-weight:600;font-size:15px;color:var(--cocoa);margin-bottom:16px">Todas las recetas <span style="font-size:12px;color:var(--text-light);font-weight:400">— haz clic en ✏️ Editar para modificar cualquiera</span></div>
         <div id="customRecipesList"></div>
       </div>
     </div>
