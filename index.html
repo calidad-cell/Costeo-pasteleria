@@ -386,11 +386,8 @@
           </div>
           <span class="porcion-cost">${costXPorc !== null ? $f(costXPorc)+' /u' : '<span style=\'color:var(--text-light);font-size:11px\'>Ingresa porciones</span>'}</span>
         </div>
-        ${custom?`<div style="margin-top:8px;display:flex;gap:6px">
-          <button class="btn btn-sm" style="flex:1;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B" onclick="event.stopPropagation();editRecipe('${p}')">✏️ Editar receta</button>
-          <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();deleteRecipe('${p}')">🗑</button>
         <div style="margin-top:8px;display:flex;gap:6px">
-          <button class="btn btn-sm" style="flex:1;background:#FFF8EE;color:#92400E;border:1px solid #F59E0B" onclick="event.stopPropagation();editRecipe('${p}')">✏️ Editar receta</button>
+          <button class="btn btn-sm" style="flex:1;background:#FEF3C7;color:#92400E;border:1px solid #F59E0B" onclick="event.stopPropagation();editRecipe('${p}')">✏️ Editar receta</button>
           ${custom?`<button class="btn btn-sm btn-delete" onclick="event.stopPropagation();deleteRecipe('${p}')">🗑</button>`:''}
         </div>
       </div>`;
@@ -525,7 +522,10 @@
         <td><input type="text" inputmode="decimal" value="${(ing.precio_neto||0).toLocaleString('es-CL')}" style="max-width:110px" 
             placeholder="0" onchange="stagePending('${key}','precio_neto',parseCLP(this.value))"></td>
         <td class="muted">${pxKg!==null?$f(pxKg)+'/kg':'<span class="no-price">Sin datos</span>'}</td>
-        <td><button class="btn btn-sm btn-save" onclick="saveIngRow('${key}')">💾 Guardar</button></td>
+        <td style="white-space:nowrap;display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm btn-save" onclick="saveIngRow('${key}')">💾 Guardar</button>
+          <button class="btn btn-sm btn-delete" onclick="deleteIngrediente('${key}')" title="Eliminar">🗑</button>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -544,6 +544,16 @@
     showToast('✅ Ingrediente guardado y sincronizado');
     renderIngTable();
     renderDashboard();
+  };
+
+  window.deleteIngrediente = function(key) {
+    const nombre = STATE.ingredientes[key] ? STATE.ingredientes[key].nombre : key;
+    if (!confirm(`¿Eliminar el ingrediente "${nombre}"?\n\nSi alguna receta lo usa, aparecerá como "Sin precio".`)) return;
+    delete STATE.ingredientes[key];
+    saveIngredientes();
+    renderIngTable();
+    renderDashboard();
+    showToast(`🗑 Ingrediente "${nombre}" eliminado`);
   };
 
   window.addIngrediente = function() {
@@ -1273,7 +1283,7 @@
       <div class="card">
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Nombre ingrediente</th><th>Categoría</th><th>Formato Compra</th><th>Precio Neto ($)</th><th>Precio/Kg equiv.</th><th>Guardar</th></tr></thead>
+            <thead><tr><th>Nombre ingrediente</th><th>Categoría</th><th>Formato Compra</th><th>Precio Neto ($)</th><th>Precio/Kg equiv.</th><th>Acciones</th></tr></thead>
             <tbody id="ingTable"></tbody>
           </table>
         </div>
