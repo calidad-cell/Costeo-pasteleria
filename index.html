@@ -1035,6 +1035,92 @@
   window.showToast = showToast;
 
   // ════════════════════════════════════════════════
+  // EXPORTAR A GOOGLE SHEETS (CSV multi-hoja)
+  // ════════════════════════════════════════════════
+  window.exportarSheets = function() {
+    const allR = getAllRecipes();
+    const BOM = '\uFEFF'; // UTF-8 BOM para que Sheets reconozca tildes
+
+    // ── HOJA 1: Resumen de costos por producto ──
+    let csv1 = 'RESUMEN DE COSTOS POR PRODUCTO\n';
+    csv1 += `Exportado el;${new Date().toLocaleString('es-CL')}\n\n`;
+    csv1 += 'Producto;Código;Porciones;Costo MP;Costo CIF;Costo MOD;Costo Packaging;Costo Total Receta;Costo por Porción\n';
+    Object.keys(allR).sort().forEach(p => {
+      const c = totalCost(p);
+      const porc = getPorciones(p);
+      const cxp = porc > 0 ? c.total / porc : '';
+      csv1 += `${p};${allR[p].codigo};${porc||''};${Math.round(c.mp)};${Math.round(c.cif)};${Math.round(c.mod)};${Math.round(c.pkg)};${Math.round(c.total)};${cxp?Math.round(cxp):''}\n`;
+    });
+
+    // ── HOJA 2: Ingredientes con precios ──
+    let csv2 = 'LISTADO DE INGREDIENTES - MATERIA PRIMA\n';
+    csv2 += `Exportado el;${new Date().toLocaleString('es-CL')}\n\n`;
+    csv2 += 'Ingrediente;Categoría;Formato Compra;Precio Neto ($);Precio/Kg equiv.\n';
+    Object.entries(STATE.ingredientes).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([key, ing]) => {
+      const pxKg = getPrecioKg(key);
+      csv2 += `${ing.nombre};${ing.categoria||''};${ing.formato_compra||''};${ing.precio_neto||0};${pxKg?Math.round(pxKg):''}\n`;
+    });
+
+    // ── HOJA 3: Detalle de recetas ──
+    let csv3 = 'DETALLE DE RECETAS\n';
+    csv3 += `Exportado el;${new Date().toLocaleString('es-CL')}\n\n`;
+    Object.keys(allR).sort().forEach(p => {
+      const r = allR[p];
+      const c = totalCost(p);
+      const porc = getPorciones(p);
+      csv3 += `\nPRODUCTO: ${p} (Cód. ${r.codigo})${porc ? ' · ' + porc + ' porciones' : ''}\n`;
+      csv3 += `Costo total receta: $${Math.round(c.total).toLocaleString('es-CL')}${porc ? ' · Por porción: $' + Math.round(c.total/porc).toLocaleString('es-CL') : ''}\n`;
+      csv3 += 'Ingrediente;Cantidad;Unidad;Costo estimado\n';
+      // Aggregate ingredients
+      const agg = {};
+      r.ingredientes.forEach(ing => {
+        const key = ing.ingrediente.trim().toLowerCase();
+        if (!agg[key]) agg[key] = { cantidad: 0, unidad: ing.unidad };
+        agg[key].cantidad += ing.cantidad;
+      });
+      Object.entries(agg).forEach(([rawKey, data]) => {
+        const mappedKey = ING_MAP[rawKey] || rawKey;
+        const px = getPrecioKg(mappedKey);
+        const costo = px ? Math.round(toKg(data.cantidad, data.unidad) * px) : '';
+        csv3 += `${rawKey};${data.cantidad};${data.unidad};${costo}\n`;
+      });
+    });
+
+    // ── HOJA 4: CIF ──
+    let csv4 = 'COSTOS INDIRECTOS DE FABRICACIÓN (CIF)\n';
+    csv4 += `Exportado el;${new Date().toLocaleString('es-CL')}\n\n`;
+    csv4 += 'Descripción;Categoría;Monto Mensual ($)\n';
+    (STATE.cif||[]).forEach(c => {
+      csv4 += `${c.nombre};${c.categoria};${c.monto}\n`;
+    });
+    const totalCIFval = (STATE.cif||[]).reduce((s,c)=>s+(parseFloat(c.monto)||0),0);
+    csv4 += `TOTAL;;${Math.round(totalCIFval)}\n`;
+    csv4 += `CIF por producto;;${Math.round(totalCIFval/Math.max(Object.keys(allR).length,1))}\n`;
+
+    // Descargar los 4 archivos CSV
+    const archivos = [
+      { nombre: '1_Resumen_Costos.csv', contenido: BOM + csv1 },
+      { nombre: '2_Ingredientes_MP.csv', contenido: BOM + csv2 },
+      { nombre: '3_Detalle_Recetas.csv', contenido: BOM + csv3 },
+      { nombre: '4_CIF.csv', contenido: BOM + csv4 },
+    ];
+
+    archivos.forEach((arch, i) => {
+      setTimeout(() => {
+        const blob = new Blob([arch.contenido], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = arch.nombre;
+        a.click();
+        URL.revokeObjectURL(url);
+      }, i * 400);
+    });
+
+    showToast('📊 Exportando 4 archivos CSV para Google Sheets...');
+  };
+
+  // ════════════════════════════════════════════════
   // INIT
   // ════════════════════════════════════════════════
   window.addEventListener('DOMContentLoaded', () => {
@@ -1231,6 +1317,7 @@
     <div class="logo">Pastelería <span>· Sistema de Costeo</span></div>
     <div class="header-right">
       <div id="syncBadge">Iniciando...</div>
+      <button class="btn-setup" onclick="exportarSheets()">📊 Exportar Sheets</button>
       <button class="btn-setup" onclick="document.getElementById('setupBanner').classList.toggle('visible')">⚙️ Firebase</button>
     </div>
   </header>
